@@ -33,18 +33,29 @@ class AzureClient(BaseClient):
         self.compute_client = ComputeManagementClient(
             self.__azureCredentials, self.subscription_id)
 
-        # +-> Check whether the given container exists
-        container_details = self.get_container()
-        if not container_details:
+        # +-> Check whether the given container exists and accessible
+        if (not self.get_container()) or (not self.access_container()):
             msg = 'Could not find or access the given container.'
             self.last_operation(msg, 'failed')
             raise Exception(msg)
+
+        self.snapshot_prefix = 'sf-snapshot'
+        self.disk_prefix = 'sf-disk'
 
     def get_container(self):
         try:
             container_props = self.block_blob_service.get_container_properties(
                 self.CONTAINER)
-            # Test if the container is accessible
+
+            return container_props
+        except Exception as error:
+            self.logger.error('[Azure] [STORAGE] ERROR: Unable to find container {}.\n{}'.format(
+                self.CONTAINER, error))
+            return None
+
+    def access_container(self):
+        # Test if the container is accessible
+        try:
             key = 'AccessTestByServiceFabrikPythonLibrary'
             self.block_blob_service.create_blob_from_text(
                 self.CONTAINER,
@@ -55,11 +66,11 @@ class AzureClient(BaseClient):
                 self.CONTAINER,
                 key
             )
-            return container_props
+            return True
         except Exception as error:
-            self.logger.error('[Azure] [STORAGE] ERROR: Unable to find or access container {}.\n{}'.format(
+            self.logger.error('[Azure] [STORAGE] ERROR: Unable to access container {}.\n{}'.format(
                 self.CONTAINER, error))
-            return None
+            return False
 
     def get_snapshot(self, snapshot_name):
         try:
@@ -93,12 +104,12 @@ class AzureClient(BaseClient):
                 device = None
                 if disk.lun == 0:
                     device = self.shell(
-                        'cat /proc/mounts | grep {} | grep /dev/'
-                        .format(self.DIRECTORY_DATA)).split(' ')[0][:8]
+                        'cat {} | grep {} | grep /dev/ '
+                        .format(self.FILE_MOUNTS, self.DIRECTORY_DATA)).split(' ')[0][:8]
                 elif disk.lun == 1:
                     device = self.shell(
-                        'cat /proc/mounts | grep {}'
-                        .format(self.DIRECTORY_PERSISTENT)).split(' ')[0][:8]
+                        'cat {} | grep {}'
+                        .format(self.FILE_MOUNTS, self.DIRECTORY_PERSISTENT)).split(' ')[0][:8]
 
                 volumeList.append(
                     Volume(disk.name, 'none', disk.disk_size_gb, device))
@@ -112,7 +123,7 @@ class AzureClient(BaseClient):
     def get_persistent_volume_for_instance(self, instance_id):
         try:
             device = self.shell(
-                'cat /proc/mounts | grep {}'.format(self.DIRECTORY_PERSISTENT)).split(' ')[0][:8]
+                'cat {} | grep {}'.format(self.FILE_MOUNTS, self.DIRECTORY_PERSISTENT)).split(' ')[0][:8]
             for volume in self.get_attached_volumes_for_instance(instance_id):
                 if volume.device == device:
                     self._add_volume_device(volume.id, device)
@@ -132,8 +143,8 @@ class AzureClient(BaseClient):
         try:
             disk_info = self.compute_client.disks.get(
                 self.resource_group, volume_id)
-            snapshot_name = 'sf-backup-{}'.format(
-                time.strftime("%Y%m%d%H%M%S"))
+            snapshot_name = '{}-{}'.format(self.snapshot_prefix,
+                                           time.strftime("%Y%m%d%H%M%S"))
             snapshot_creation_operation = self.compute_client.snapshots.create_or_update(
                 self.resource_group,
                 snapshot_name,
@@ -207,8 +218,8 @@ class AzureClient(BaseClient):
             if snapshot_id is not None:
                 snapshot = self.compute_client.snapshots.get(
                     self.resource_group, snapshot_id)
-                disk_name = 'sf-backup-disk-{}'.format(
-                    time.strftime("%Y%m%d%H%M%S"))
+                disk_name = '{}-{}'.format(self.disk_prefix,
+                                           time.strftime("%Y%m%d%H%M%S"))
                 disk_creation_operation = self.compute_client.disks.create_or_update(
                     self.resource_group,
                     disk_name,
@@ -221,8 +232,8 @@ class AzureClient(BaseClient):
                     }
                 )
             else:
-                disk_name = 'sf-disk-{}'.format(
-                    time.strftime("%Y%m%d%H%M%S"))
+                disk_name = '{}-{}'.format(self.disk_prefix,
+                                           time.strftime("%Y%m%d%H%M%S"))
                 disk_creation_operation = self.compute_client.disks.create_or_update(
                     self.resource_group,
                     disk_name,
@@ -291,7 +302,7 @@ class AzureClient(BaseClient):
             volume = self.compute_client.disks.get(
                 self.resource_group, volume_id)
             all_data_disks = virtual_machine.storage_profile.data_disks
-            # ideally should be travers through all disks and find next balnk lun
+            # traversing  through all disks and finding next balnk lun
             next_lun = 0
             for disk in all_data_disks:
                 if disk.lun == next_lun:

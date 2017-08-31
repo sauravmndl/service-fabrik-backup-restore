@@ -23,6 +23,7 @@ class BaseClient:
         self.DIRECTORY_PERSISTENT = directory_persistent
         self.DIRECTORY_WORK_LIST = directory_work_list
         self.DIRECTORY_DATA = '/var/vcap/data'
+        self.FILE_MOUNTS = '/proc/mounts'
         assert len(
             self.OPERATION) > 0, 'No operation name (backup or restore) given.'
         assert len(
