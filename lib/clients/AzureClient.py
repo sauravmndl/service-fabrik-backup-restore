@@ -7,6 +7,7 @@ from azure.mgmt.compute.models import DiskCreateOption
 from azure.mgmt.compute.models import DiskCreateOptionTypes
 import time
 import glob
+import random
 from .BaseClient import BaseClient
 from ..models.Snapshot import Snapshot
 from ..models.Volume import Volume
@@ -143,8 +144,9 @@ class AzureClient(BaseClient):
         try:
             disk_info = self.compute_client.disks.get(
                 self.resource_group, volume_id)
-            snapshot_name = '{}-{}'.format(self.snapshot_prefix,
-                                           time.strftime("%Y%m%d%H%M%S"))
+            snapshot_name = '{}-{}-{}'.format(self.snapshot_prefix,
+                                              random.randrange(10000, 99999),
+                                              time.strftime("%Y%m%d%H%M%S"))
             snapshot_creation_operation = self.compute_client.snapshots.create_or_update(
                 self.resource_group,
                 snapshot_name,
@@ -218,8 +220,9 @@ class AzureClient(BaseClient):
             if snapshot_id is not None:
                 snapshot = self.compute_client.snapshots.get(
                     self.resource_group, snapshot_id)
-                disk_name = '{}-{}'.format(self.disk_prefix,
-                                           time.strftime("%Y%m%d%H%M%S"))
+                disk_name = '{}-{}-{}'.format(self.disk_prefix,
+                                              random.randrange(10000, 99999),
+                                              time.strftime("%Y%m%d%H%M%S"))
                 disk_creation_operation = self.compute_client.disks.create_or_update(
                     self.resource_group,
                     disk_name,
@@ -232,8 +235,9 @@ class AzureClient(BaseClient):
                     }
                 )
             else:
-                disk_name = '{}-{}'.format(self.disk_prefix,
-                                           time.strftime("%Y%m%d%H%M%S"))
+                disk_name = '{}-{}-{}'.format(self.disk_prefix,
+                                              random.randrange(10000, 99999),
+                                              time.strftime("%Y%m%d%H%M%S"))
                 disk_creation_operation = self.compute_client.disks.create_or_update(
                     self.resource_group,
                     disk_name,
