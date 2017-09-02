@@ -42,6 +42,13 @@ class AzureClient(BaseClient):
 
         self.snapshot_prefix = 'sf-snapshot'
         self.disk_prefix = 'sf-disk'
+        # scsi_host_number would be used to determine lun to device mapping
+        # scsi_host_number would be same for all data volumes/disks
+        self.scsi_host_number = self.get_hot_number_of_data_volumes()
+        if not self.scsi_host_number:
+            msg = 'Could not determine SCSI host number for data volume'
+            self.last_operation(msg, 'failed')
+            raise Exception(msg)
 
     def get_container(self):
         try:
@@ -95,26 +102,50 @@ class AzureClient(BaseClient):
                     volume_name, error))
             return None
 
+    def get_hot_number_of_data_volumes(self):
+        '''
+        This particual funtion is specific for Azure.
+        This determines the scsi host number for the persistent disk.
+        The host number along with lun would be required to find out device deterministic way.
+        '''
+        host_number = None
+        try:
+            device_persistent_volume = self.shell(
+                'cat {} | grep {}'
+                .format(self.FILE_MOUNTS, self.DIRECTORY_PERSISTENT)).split(' ')[0][5:-1]
+            device_paths = glob.glob(
+                '/sys/bus/scsi/devices/*:*:*:*/block/{}'.format(device_persistent_volume))
+            if len(device_paths) > 1:
+                raise Exception('Invalid device paths for device {}'.format(
+                    device_persistent_volume))
+            # Success: Go only one device path
+            host_number = device_paths[0][22:-len(
+                '/block/{}'.format(device_persistent_volume))].split(':')[0]
+        except Exception as error:
+            self.logger.error(
+                '[ERROR] [SCSI HOST NUMBER] [DATA VOLUME] Error while determining SCSI host number'
+                'of persistent volume directory {}.{}'.format(self.DIRECTORY_PERSISTENT, error))
+        return host_number
+
     def get_attached_volumes_for_instance(self, instance_id):
         instance = self.compute_client.virtual_machines.get(
             self.resource_group, instance_id
         )
         try:
-            volumeList = []
+            volume_list = []
             for disk in instance.storage_profile.data_disks:
                 device = None
-                if disk.lun == 0:
-                    device = self.shell(
-                        'cat {} | grep {} | grep /dev/ '
-                        .format(self.FILE_MOUNTS, self.DIRECTORY_DATA)).split(' ')[0][:8]
-                elif disk.lun == 1:
-                    device = self.shell(
-                        'cat {} | grep {}'
-                        .format(self.FILE_MOUNTS, self.DIRECTORY_PERSISTENT)).split(' ')[0][:8]
+                device_path = glob.glob(
+                    '/sys/bus/scsi/devices/{}:*:*:{}/block'.format(self.scsi_host_number, disk.lun))
+                if len(device_path) != 1:
+                    raise Exception(
+                        'Found more than one device paths fo lun {}'.format(disk.lun))
+                device = '/dev/{}'.format(self.shell(
+                    'ls {}'.format(device_path[0])).rstrip())
 
-                volumeList.append(
+                volume_list.append(
                     Volume(disk.name, 'none', disk.disk_size_gb, device))
-            return volumeList
+            return volume_list
         except Exception as error:
             self.logger.error(
                 '[Azure] ERROR: Unable to find or access attached volume for instance_id {}.{}'.format(
@@ -313,7 +344,7 @@ class AzureClient(BaseClient):
                     next_lun += 1
 
             existing_devices_path = glob.glob(
-                '/sys/bus/scsi/devices/*:*:*:{}/block'.format(next_lun))
+                '/sys/bus/scsi/devices/{}:*:*:{}/block'.format(self.scsi_host_number, next_lun))
             virtual_machine.storage_profile.data_disks.append({
                 'lun': next_lun,
                 'name': volume.name,
@@ -335,9 +366,8 @@ class AzureClient(BaseClient):
                        disk_attach_operation)
 
             updated_vm = disk_attach_operation.result()
-            # TODO: Need to take care how device is handled
             all_devices_path = glob.glob(
-                '/sys/bus/scsi/devices/*:*:*:{}/block'.format(next_lun))
+                '/sys/bus/scsi/devices/{}:*:*:{}/block'.format(self.scsi_host_number, next_lun))
             new_devices_path = list(set(all_devices_path) -
                                     set(existing_devices_path))
             if len(new_devices_path) > 1:
