@@ -489,6 +489,25 @@ class AzureClient(BaseClient):
             self.logger.error(message)
             raise Exception(message)
 
+    def _list_blobs(self, prefix=None):
+        log_prefix = '[AZURE STORAGE CONTINER] [LIST BLOBS]'
+        self.logger.info('{} Listing blobs with prefix {} in container {}'.format(log_prefix, prefix, self.CONTAINER))
+        blob_names = []
+        try:
+            blob_list = self.block_blob_service.list_blobs(self.CONTAINER, prefix=prefix)
+            if (blob_list is not None) and (blob_list.items):
+                blob_names = [None] * len(blob_list.items)
+                i = 0
+                for item in blob_list.items:
+                    blob_names[i] = item.name
+                    i = i + 1
+            return blob_names
+        except Exception as error:
+            message = '{} ERROR: Listing blobs with prefix={}, container={}\n{}'.format(
+                log_prefix, prefix, self.CONTAINER, error)
+            self.logger.error(message)
+            raise Exception(message)
+
     def _download_from_blobstore_and_pipe_to_process(self, process, blob_to_download_name, segment_size):
         self.block_blob_service.get_blob_to_stream(
             self.CONTAINER, blob_to_download_name, process.stdin,

@@ -814,6 +814,17 @@ class BaseClient:
         """
         return self.__retry(self._download_from_blobstore, args)
 
+    def list_blobs(self, *args):
+        """List all blobs from a container.
+        :param prefix: the prefix of the blobs to be listed
+
+        :Example:
+            ::
+
+                iaas_client.list_blobs('/backups')
+        """
+        return self.__retry(self._list_blobs, args)
+
     def download_from_blobstore_decrypt_extract(self, blob_to_download_name, blob_download_target_path):
         """Download a file from BLOB storage and pipe it to a subprocess for decryption and decompression.
 

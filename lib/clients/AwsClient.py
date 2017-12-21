@@ -400,7 +400,7 @@ class AwsClient(BaseClient):
         log_prefix = '[S3] [DOWNLOAD]'
 
         if self.container:
-            self.logger.info('{} Started to download the tarball to target.'.format(log_prefix,
+            self.logger.info('{} Started to download the tarball to target {}.'.format(log_prefix,
                                                                                     blob_download_target_path))
             try:
                 self.container.download_file(blob_to_download_name, blob_download_target_path)
@@ -413,7 +413,26 @@ class AwsClient(BaseClient):
                           blob_to_download_name, blob_download_target_path, self.CONTAINER, error)
                 self.logger.error(message)
                 raise Exception(message)
-
+ 
+    def _list_blobs(self, prefix=None):
+        log_prefix = '[S3] [LIST BLOBS]'
+        self.logger.info('{} Listing blobs with prefix {} in container {}'.format(log_prefix, prefix, self.CONTAINER))
+        blob_names = []
+        try:
+            blob_list = self.s3.client.list_objects(self.CONTAINER, Prefix=prefix)
+            if (blob_list is not None) and (blob_list['Contents']):
+                blob_list_contents = blob_list['Contents']
+                blob_names = [None] * len(blob_list_contents)
+                i = 0
+                for item in blob_list_contents:
+                    blob_names[i] = item['Key']
+                    i = i + 1
+            return blob_names
+        except Exception as error:
+            message = '{} ERROR: Listing blobs with prefix={}, container={}\n{}'.format(
+                log_prefix, prefix, self.CONTAINER, error)
+            self.logger.error(message)
+            raise Exception(message)
 
     def _download_from_blobstore_and_pipe_to_process(self, process, blob_to_download_name, segment_size):
         s3_object_body = self.s3.Object(self.CONTAINER, blob_to_download_name).get()['Body']
