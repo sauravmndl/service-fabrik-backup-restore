@@ -44,6 +44,7 @@ parameters_backup = {
 
 parameters_restore = {
     'backup_guid': 'the guid of the backup to be restored',
+    'time_stamp': 'the time stamp at what point to be restored',
     'instance_id': 'the ID of the AWS/OpenStack instance to be restored',
     'secret': 'the password used for the decryption of the backup set',
     'container': 'a container in the object storage from which to restore data',
