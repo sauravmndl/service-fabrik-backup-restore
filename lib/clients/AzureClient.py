@@ -48,7 +48,8 @@ class AzureClient(BaseClient):
             self.last_operation(msg, 'failed')
             raise Exception(msg)
         self.instance_location = None
-        self.tags= {'instance_id' :self.INSTANCE_ID , 'job_name' :self.JOB_NAME}
+        self.tags = {'instance_id': self.INSTANCE_ID,
+                     'job_name': self.JOB_NAME}
 
     def get_container(self):
         try:
@@ -451,15 +452,17 @@ class AzureClient(BaseClient):
             device += partition
         return device
 
-    def _upload_to_blobstore(self, blob_to_upload_path, blob_target_name):
+    def _upload_to_blobstore(self, blob_to_upload_path, blob_target_name, max_connections=2):
         log_prefix = '[AZURE STORAGE CONTAINER] [UPLOAD]'
         self.logger.info(
             '{} Started to upload the tarball to the object storage.'.format(log_prefix))
         try:
+            self.block_blob_service.MAX_BLOCK_SIZE = 100 * 1024 * 1024
             self.block_blob_service.create_blob_from_path(
                 self.CONTAINER,
                 blob_target_name,
-                blob_to_upload_path)
+                blob_to_upload_path,
+                max_connections)
             # TODO: need to check above 'blob_target_name'
             self.logger.info('{} SUCCESS: blob_to_upload={}, blob_target_name={}, container={}'.format(
                 log_prefix, blob_to_upload_path, blob_target_name, self.CONTAINER))
@@ -491,10 +494,12 @@ class AzureClient(BaseClient):
 
     def _list_blobs(self, prefix=None):
         log_prefix = '[AZURE STORAGE CONTINER] [LIST BLOBS]'
-        self.logger.info('{} Listing blobs with prefix {} in container {}'.format(log_prefix, prefix, self.CONTAINER))
+        self.logger.info('{} Listing blobs with prefix {} in container {}'.format(
+            log_prefix, prefix, self.CONTAINER))
         blob_names = []
         try:
-            blob_list = self.block_blob_service.list_blobs(self.CONTAINER, prefix=prefix)
+            blob_list = self.block_blob_service.list_blobs(
+                self.CONTAINER, prefix=prefix)
             if (blob_list is not None) and (blob_list.items):
                 blob_names = [None] * len(blob_list.items)
                 i = 0
